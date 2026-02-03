@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Trophy, Star, Clock, ChevronRight, Filter, Search } from 'lucide-react';
 import { useState } from 'react';
 import { challenges } from '../data/challenges';
+import { useProgress } from '../context/ProgressContext';
 
 const difficultyColors = {
   easy: 'text-green-400 bg-green-500/10 border-green-500/20',
@@ -18,13 +19,7 @@ const difficultyStars = {
 function ChallengesPage() {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [completedChallenges] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('completed-challenges') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const { completedChallenges, progress, isChallengeComplete } = useProgress();
 
   const filteredChallenges = challenges.filter(challenge => {
     const matchesFilter = filter === 'all' || challenge.difficulty === filter;
@@ -35,7 +30,7 @@ function ChallengesPage() {
 
   const stats = {
     total: challenges.length,
-    completed: completedChallenges.length,
+    completed: progress.completedChallenges.length,
     easy: challenges.filter(c => c.difficulty === 'easy').length,
     medium: challenges.filter(c => c.difficulty === 'medium').length,
     hard: challenges.filter(c => c.difficulty === 'hard').length,
@@ -118,7 +113,7 @@ function ChallengesPage() {
             </div>
           ) : (
             filteredChallenges.map((challenge) => {
-              const isCompleted = completedChallenges.includes(challenge.id);
+              const isCompleted = isChallengeComplete(challenge.id);
               return (
                 <Link
                   key={challenge.id}
