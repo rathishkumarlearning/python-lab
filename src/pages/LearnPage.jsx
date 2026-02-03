@@ -2,176 +2,200 @@
  * LearnPage - Python learning lessons with interactive examples
  */
 
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { usePython } from '../hooks/usePython';
-import CodeEditor from '../components/CodeEditor';
-import OutputPanel from '../components/OutputPanel';
-import SplitPane from '../components/SplitPane';
+import { useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { Play, ChevronLeft, ChevronRight, CheckCircle2, BookOpen, Loader2 } from 'lucide-react'
+import { usePython } from '../hooks/usePython'
+import { useProgress } from '../context/ProgressContext'
+import CodeEditor from '../components/CodeEditor'
+import OutputPanel from '../components/OutputPanel'
+import { lessons } from '../data/lessons'
 
-const LESSONS = [
-  {
-    id: 'hello-world',
-    title: 'Hello, World!',
-    description: 'Your first Python program',
-    content: `
-# Welcome to Python! 🐍
-
-Python is one of the easiest programming languages to learn.
-Let's start with the classic "Hello, World!" program.
-
-The \`print()\` function displays text on the screen.
-    `,
-    code: `# Your first Python program!
-print("Hello, World!")
-
-# Try changing the message
-print("Python is awesome!")`,
-  },
-  {
-    id: 'variables',
-    title: 'Variables',
-    description: 'Storing and using data',
-    content: `
-# Variables 📦
-
-Variables are like labeled boxes that store data.
-In Python, you create a variable by giving it a name and a value.
-
-\`\`\`python
-name = "Alice"    # String (text)
-age = 25          # Integer (whole number)
-height = 5.7      # Float (decimal number)
-is_student = True # Boolean (True/False)
-\`\`\`
-    `,
-    code: `# Create some variables
-name = "Alice"
-age = 25
-city = "New York"
-
-# Print them out
-print(f"Hello, my name is {name}")
-print(f"I am {age} years old")
-print(f"I live in {city}")`,
-  },
-  {
-    id: 'lists',
-    title: 'Lists',
-    description: 'Working with collections',
-    content: `
-# Lists 📝
-
-Lists store multiple items in a single variable.
-They're ordered, changeable, and allow duplicates.
-
-\`\`\`python
-fruits = ["apple", "banana", "cherry"]
-numbers = [1, 2, 3, 4, 5]
-mixed = ["hello", 42, True, 3.14]
-\`\`\`
-    `,
-    code: `# Create a list
-fruits = ["apple", "banana", "cherry"]
-
-# Print the list
-print("My fruits:", fruits)
-
-# Access items by index (starts at 0)
-print("First fruit:", fruits[0])
-print("Last fruit:", fruits[-1])
-
-# Add a new item
-fruits.append("orange")
-print("After adding orange:", fruits)
-
-# List length
-print("I have", len(fruits), "fruits")`,
-  },
-];
-
-export function LearnPage() {
-  const { lessonId } = useParams();
-  const { runCode, isLoading, isReady, isRunning, output, error, clearOutput } = usePython();
+export default function LearnPage() {
+  const { lessonId } = useParams()
+  const navigate = useNavigate()
+  const { runCode, isLoading, isReady, isRunning, output, error, executionTime, clearOutput } = usePython()
+  const { isLessonComplete, completeLesson } = useProgress()
   
-  const currentLesson = LESSONS.find(l => l.id === lessonId) || LESSONS[0];
-  const [code, setCode] = useState(currentLesson.code);
+  // Find current lesson
+  const currentIndex = lessonId 
+    ? lessons.findIndex(l => l.id === lessonId)
+    : 0
+  const currentLesson = lessons[currentIndex] || lessons[0]
+  const prevLesson = currentIndex > 0 ? lessons[currentIndex - 1] : null
+  const nextLesson = currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null
+  
+  const [code, setCode] = useState(currentLesson?.starterCode || '')
 
   useEffect(() => {
-    setCode(currentLesson.code);
-    clearOutput();
-  }, [lessonId, currentLesson.code, clearOutput]);
+    if (currentLesson) {
+      setCode(currentLesson.starterCode || '')
+      clearOutput()
+    }
+  }, [currentLesson, clearOutput])
+
+  // Navigate to first lesson if no lessonId
+  useEffect(() => {
+    if (!lessonId && lessons.length > 0) {
+      navigate(`/learn/${lessons[0].id}`, { replace: true })
+    }
+  }, [lessonId, navigate])
 
   const handleRun = async () => {
-    await runCode(code);
-  };
+    const result = await runCode(code)
+    if (result.success) {
+      completeLesson(currentLesson.id)
+    }
+  }
+
+  if (!currentLesson) {
+    return (
+      <div className="p-8 text-center">
+        <h1 className="text-2xl text-white mb-4">Lesson not found</h1>
+        <Link to="/learn" className="text-purple-400 hover:underline">
+          Back to lessons
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <div className="learn-page h-full flex">
-      {/* Lesson Sidebar */}
-      <div className="w-64 bg-gray-100 border-r overflow-y-auto">
-        <h2 className="p-4 font-bold text-lg border-b">Lessons</h2>
+    <div className="h-[calc(100vh-4rem)] flex">
+      {/* Sidebar - Lesson List */}
+      <aside className="w-72 border-r border-white/10 overflow-y-auto hidden lg:block">
+        <div className="p-4 border-b border-white/10">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <BookOpen size={20} />
+            Lessons
+          </h2>
+        </div>
         <nav className="p-2">
-          {LESSONS.map((lesson) => (
-            <Link
-              key={lesson.id}
-              to={`/learn/${lesson.id}`}
-              className={`block p-3 rounded mb-1 ${
-                lesson.id === currentLesson.id 
-                  ? 'bg-blue-500 text-white' 
-                  : 'hover:bg-gray-200'
-              }`}
-            >
-              <div className="font-medium">{lesson.title}</div>
-              <div className="text-sm opacity-75">{lesson.description}</div>
-            </Link>
-          ))}
+          {lessons.map((lesson, index) => {
+            const isActive = lesson.id === currentLesson.id
+            const completed = isLessonComplete(lesson.id)
+            
+            return (
+              <Link
+                key={lesson.id}
+                to={`/learn/${lesson.id}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-all ${
+                  isActive 
+                    ? 'bg-purple-500/20 border border-purple-500/30 text-white' 
+                    : 'text-white/60 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                  completed 
+                    ? 'bg-green-500/20 text-green-400' 
+                    : 'bg-white/10 text-white/60'
+                }`}>
+                  {completed ? <CheckCircle2 size={14} /> : index + 1}
+                </span>
+                <span className="truncate">{lesson.title}</span>
+              </Link>
+            )
+          })}
         </nav>
-      </div>
+      </aside>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Lesson Header */}
-        <div className="p-4 border-b bg-white">
-          <h1 className="text-2xl font-bold">{currentLesson.title}</h1>
-          <p className="text-gray-600">{currentLesson.description}</p>
-        </div>
+        {/* Header */}
+        <header className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/learn" className="lg:hidden text-white/50 hover:text-white">
+              <ChevronLeft size={24} />
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                {currentLesson.title}
+                {isLessonComplete(currentLesson.id) && (
+                  <CheckCircle2 size={18} className="text-green-400" />
+                )}
+              </h1>
+              <span className="text-sm text-white/50">
+                Lesson {currentIndex + 1} of {lessons.length}
+              </span>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleRun}
+            disabled={!isReady || isRunning}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity"
+          >
+            {isRunning ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+            {isLoading ? 'Loading...' : 'Run Code'}
+          </button>
+        </header>
 
-        {/* Lesson Content & Code */}
-        <SplitPane>
-          {/* Instructions */}
-          <div className="p-4 overflow-y-auto bg-gray-50">
-            <div className="prose max-w-none whitespace-pre-wrap">
-              {currentLesson.content}
+        {/* Content Area */}
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* Left: Lesson Content */}
+          <div className="lg:w-1/2 p-4 overflow-y-auto border-b lg:border-b-0 lg:border-r border-white/10">
+            <div 
+              className="prose prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: currentLesson.content }}
+            />
+            
+            {/* Navigation */}
+            <div className="flex items-center justify-between mt-8 pt-4 border-t border-white/10">
+              {prevLesson ? (
+                <Link
+                  to={`/learn/${prevLesson.id}`}
+                  className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                  <span>{prevLesson.title}</span>
+                </Link>
+              ) : <div />}
+              
+              {nextLesson ? (
+                <Link
+                  to={`/learn/${nextLesson.id}`}
+                  className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  <span>{nextLesson.title}</span>
+                  <ChevronRight size={20} />
+                </Link>
+              ) : (
+                <Link
+                  to="/challenges"
+                  className="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors"
+                >
+                  <span>Try Challenges</span>
+                  <ChevronRight size={20} />
+                </Link>
+              )}
             </div>
           </div>
 
-          {/* Code Editor & Output */}
-          <div className="flex flex-col h-full">
-            <div className="flex-1 min-h-0">
-              <CodeEditor
-                value={code}
+          {/* Right: Code Editor + Output */}
+          <div className="lg:w-1/2 flex flex-col overflow-hidden">
+            {/* Code Editor */}
+            <div className="flex-1 p-4 min-h-0">
+              <CodeEditor 
+                code={code} 
                 onChange={setCode}
                 disabled={!isReady}
+                height="100%"
               />
             </div>
-            <div className="p-2 border-t bg-gray-100">
-              <button
-                onClick={handleRun}
-                disabled={!isReady || isRunning}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-              >
-                {isRunning ? '⏳ Running...' : '▶️ Run'}
-              </button>
-            </div>
-            <div className="h-48 border-t">
-              <OutputPanel output={output} error={error} isLoading={isLoading} />
+            
+            {/* Output Panel */}
+            <div className="h-48 p-4 pt-0">
+              <OutputPanel 
+                output={output} 
+                error={error} 
+                isLoading={isLoading}
+                isRunning={isRunning}
+                executionTime={executionTime}
+                onClear={clearOutput}
+              />
             </div>
           </div>
-        </SplitPane>
+        </div>
       </div>
     </div>
-  );
+  )
 }
-
-export default LearnPage;
